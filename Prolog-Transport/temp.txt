@@ -1,0 +1,1 @@
+readIn('4x4in.txt', L, R, C, Q, B)

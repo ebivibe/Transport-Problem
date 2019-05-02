@@ -1,0 +1,185 @@
+#lang racket
+
+(current-directory)
+(define fp (build-path "C:" "Users" "Ivana" "Documents" "Paradigms" "Scheme-Comprehensive"))
+(current-directory fp)
+(current-directory)
+
+
+(define (readTableau fileIn)  
+  (let ((sL (map (lambda s (string-split (car s))) (file->lines fileIn))))
+    (map (lambda (L)
+           (map (lambda (s)
+                  (if (eqv? (string->number s) #f)
+                      s
+                      (string->number s))) L)) sL)))
+
+(define (writeTableau tb fileOut)
+  (if (eqv? tb '())
+      #t
+      (begin (display-lines-to-file (car tb) fileOut #:separator #\space #:exists 'append)
+             (display-to-file #\newline fileOut #:exists 'append)
+             (writeTableau (cdr tb) fileOut))))
+
+;Returns the list L before index i
+(define (before L start i)
+(cond
+((null? L) '())
+((equal? start i) '())
+(else (cons (car L) (before (cdr L) (+ 1 start) i)))
+))
+
+
+;Returns the list L before after i
+(define (after L start i)
+(cond
+((null? L) '())
+((equal? start i) (cdr L))
+(else (after (cdr L) (+ 1 start) i))
+))
+
+; Replace the element in matrix L at (i,j) with v
+(define (replace L i j v)
+(append (before L 0 i) (append
+                        (list (append (before (list-ref L i) 0 j) (append (cons v '()) (after (list-ref L i) 0 j)))) (after L 0 i)))
+)
+
+
+; Returns number of columns
+(define (columns L)
+(length (car L)))
+    
+
+; Returns number of rows
+(define (rows L)
+(length L)
+)
+
+; Returns the demand of warehouse i (starting at 1)
+(define (demand L i)
+(list-ref (list-ref L (- (rows L) 1)) i)
+)
+
+
+; Returns the demand of factory i (starting at 1)
+(define (supply L i)
+(list-ref (list-ref L i) (- (columns L) 1)
+))
+
+;Return the sum of a row
+(define (sumlist L)
+  (cond
+    ((null? L) 0)
+    (else (+ (car L) (sumlist (cdr L))))
+  )
+)
+
+;Return column i from the matrix as a list (index starting at 0)
+(define (coltolist matrix i)
+  (cond
+    ((null? matrix) '())
+    (else (cons (list-ref (car matrix) i) (coltolist (cdr matrix) i)))
+  )
+)
+
+
+; Returns the remaining supply of factory i (starting at 1)
+(define (supplyremaining matrix paths i)
+  (- (supply matrix i) (sumlist (list-ref paths (- i 1))))
+  )
+
+; Returns the remaining demand of warehouse i (starting at 1)
+(define (demandremaining matrix paths i)
+  (- (demand matrix i) (sumlist (coltolist paths (- i 1))))
+  )
+
+
+;Find first available path
+(define (first matrix paths currenti currentj)
+(cond
+  ((and (equal? currenti (-(rows matrix) 3)) (equal? currentj (-(columns matrix) 2))) #f)
+  ((equal? currentj (-(columns matrix) 2)) (cond
+                                             ((and
+                                               (> (supplyremaining matrix paths (+ 2 currenti)) 0)
+                                               (> (demandremaining matrix paths 1) 0)
+                                                   ) (list (+ 1 currenti) 0))
+                                               (else (first matrix paths (+ 1 currenti) 1) )
+                                                 ))
+  (else (cond
+                                             ((and
+                                               (> (supplyremaining matrix paths (+ 1 currenti)) 0)
+                                               (> (demandremaining matrix paths (+ 1 currentj)) 0)
+                                                   ) (list currenti currentj))
+                                             (else (first matrix paths currenti (+ currentj 1) )
+                                                 ))
+  )
+  )
+  )
+
+;Find minimum non filled (i j) in paths
+(define (find matrix paths currenti currentj besti bestj)
+(cond
+  ((equal? currenti (-(rows matrix) 2)) (list besti bestj))
+  ((equal? currentj (-(columns matrix) 2)) (cond
+                                             ((and
+                                               (< (list-ref (list-ref matrix (+ 2 currenti)) 1) (list-ref (list-ref matrix (+ 1 besti)) (+ 1 bestj)))
+                                               (> (supplyremaining matrix paths (+ 2 currenti)) 0)
+                                               (> (demandremaining matrix paths 1) 0)
+                                                   ) (find matrix paths (+ 1 currenti) 1 (+ 1 currenti) 0))
+                                             (else (find matrix paths (+ 1 currenti) 1 besti bestj) )
+                                                 ))
+  (else (cond
+                                             ((and
+                                               (< (list-ref (list-ref matrix (+ 1 currenti)) (+ 1 currentj)) (list-ref (list-ref matrix (+ 1 besti)) (+ 1 bestj)))
+                                               (> (supplyremaining matrix paths (+ 1 currenti)) 0)
+                                               (> (demandremaining matrix paths (+ 1 currentj)) 0)
+                                                   ) (find matrix paths currenti (+ currentj 1) currenti currentj))
+                                             (else (find matrix paths currenti (+ currentj 1) besti bestj) )
+                                                 ))
+  )
+ )
+
+(define (iter matrix paths price)
+  ;(display paths) (newline)
+  (let ((first (first matrix paths 0 0)))
+    ;(display first) (newline)
+    (cond ((not (equal? first #f))
+    (let ((firsti (car first)) (firstj (cadr first)))
+     (let ((item (find matrix paths firsti firstj firsti firstj)))
+    ;(display item) (newline)
+    (let ((i (car item)) (j (cadr item)))
+      (iter matrix (replace paths i j (min (supplyremaining matrix paths (+ 1 i)) (demandremaining matrix paths (+ 1 j)))) (+ price (* (min (supplyremaining matrix paths (+ 1 i)) (demandremaining matrix paths (+ 1 j))) (list-ref (list-ref matrix (+ i 1)) (+ j 1)))))
+      )
+    )
+  ))
+  (else (list paths price))
+  )
+  )
+  )
+
+;Converts the middle of the matrix to the right format 1D
+(define (convert1 matrix paths i)
+(cond
+((equal? i (- (rows matrix) 2)) '())
+(else (append (cons (car (list-ref matrix (+ 1 i))) (append (list-ref paths i) (cons (list-ref (list-ref matrix (+ 1 i)) (- (columns matrix) 1)) '())) ) (convert1 matrix paths (+ 1 i)))
+  ) ) 
+  )
+
+;Converts the middle of the matrix to the right format 2D
+(define (convert2 matrix paths i)
+(cond
+((equal? i (- (rows matrix) 2)) '())
+(else (cons (cons (car (list-ref matrix (+ 1 i))) (append (list-ref paths i) (cons (list-ref (list-ref matrix (+ 1 i)) (- (columns matrix) 1)) '())) ) (convert2 matrix paths (+ 1 i)))
+  ) ) 
+  )
+
+(define (minimumCell in out)
+  (let ((matrix (readTableau in)))
+      (let ((paths (make-list (- (rows matrix) 2) (make-list (- (columns matrix) 2) 0))))
+        (let ((vals (iter matrix paths 0) ))
+         (display-to-file (string-append "Cost: " (number->string (cadr vals)) "\nSolution:\n") out  #:exists 'replace)
+        (writeTableau (cons (car matrix) (append (convert2 matrix (car vals) 0) (cons (list-ref matrix (- (columns matrix) 1)) '()))) out)
+        ))    
+  )
+  )
+  

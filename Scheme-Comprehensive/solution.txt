@@ -1,0 +1,7 @@
+Cost: 4550
+Solution:
+COSTS A B C SUPPLY 
+Source1 0 25 125 150 
+Source2 0 0 175 175 
+Source3 200 75 0 275 
+DEMAND 200 100 300 
